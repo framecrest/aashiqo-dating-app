@@ -28,7 +28,8 @@ const registerUser = async (req, res) => {
         password: hashedPassword,
         age,
         gender,
-        city,
+        location: { city }, // Structure matches new schema
+        auth_provider: 'local'
     });
 
     if (user) {
@@ -46,11 +47,35 @@ const registerUser = async (req, res) => {
 };
 
 const authUser = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, deviceId } = req.body;
 
     const user = await User.findOne({ email });
 
-    if (user && (await bcrypt.compare(password, user.password))) {
+    if (!user) {
+        res.status(401);
+        throw new Error('Invalid email or password');
+    }
+
+    // Check Account Lock
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+        res.status(403);
+        throw new Error(`Account locked. Try again after ${user.lockUntil.toLocaleTimeString()}`);
+    }
+
+    if (await bcrypt.compare(password, user.password)) {
+        // Login Success
+        user.loginAttempts = 0;
+        user.lockUntil = undefined;
+
+        // Track Session
+        user.deviceSessions.push({
+            deviceId: deviceId || 'unknown',
+            lastActive: new Date(),
+            token: 'current-session' // In real app, store hash of refresh token
+        });
+
+        await user.save();
+
         res.json({
             _id: user._id,
             name: user.name,
@@ -59,8 +84,17 @@ const authUser = async (req, res) => {
             token: generateToken(user._id),
         });
     } else {
+        // Login Failed
+        user.loginAttempts = (user.loginAttempts || 0) + 1;
+
+        if (user.loginAttempts >= 5) {
+            user.lockUntil = Date.now() + 15 * 60 * 1000; // Lock for 15 minutes
+        }
+
+        await user.save();
+
         res.status(401);
-        throw new Error('Invalid email or password');
+        throw new Error(user.lockUntil ? 'Account locked due to too many failed attempts' : 'Invalid email or password');
     }
 };
 

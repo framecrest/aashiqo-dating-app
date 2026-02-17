@@ -24,19 +24,34 @@ const SwipeScreen = () => {
         }
     };
 
-    const handleLike = async () => {
+    const handleSwipe = async (action) => {
         const currentProfile = profiles[currentIndex];
         try {
-            await api.post('/matches/like', { likedUserId: currentProfile._id });
+            const { data } = await api.post('/matches/swipe', {
+                targetUserId: currentProfile._id,
+                action: action
+            });
+
+            if (data.isMatch) {
+                // Ideally show a match modal here
+                // For now, we can navigate to the dedicated match screen or show an alert
+                // Navigation to 'Matches' tab or a modal is good practice
+                // Alert.alert("It's a Match!", `You and ${currentProfile.name} liked each other!`);
+                console.log("Match found with:", currentProfile.name);
+            }
+
             nextProfile();
         } catch (error) {
-            console.error(error);
+            console.error('Swipe error:', error);
+            // Verify if error is "already swiped", maybe just move next
+            if (error.response?.status === 400) {
+                nextProfile();
+            }
         }
     };
 
-    const handlePass = () => {
-        nextProfile();
-    };
+    const handleLike = () => handleSwipe('like');
+    const handlePass = () => handleSwipe('pass');
 
     const nextProfile = () => {
         if (currentIndex < profiles.length - 1) {

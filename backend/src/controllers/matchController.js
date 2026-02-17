@@ -1,59 +1,122 @@
 const User = require('../models/User');
 const Match = require('../models/Match');
 
-const likeUser = async (req, res) => {
-    const { likedUserId } = req.body;
+// @desc    Swipe on a user (like, pass, superlike)
+// @route   POST /api/matches/swipe
+// @access  Private
+const swipeUser = async (req, res) => {
+    const { targetUserId, action } = req.body; // action: 'like', 'pass', 'superlike'
     const currentUserId = req.user._id;
 
-    const currentUser = await User.findById(currentUserId);
-    const likedUser = await User.findById(likedUserId);
+    if (!['like', 'pass', 'superlike'].includes(action)) {
+        res.status(400);
+        throw new Error('Invalid swipe action');
+    }
 
-    if (!likedUser) {
+    if (currentUserId.toString() === targetUserId) {
+        res.status(400);
+        throw new Error('Cannot swipe on yourself');
+    }
+
+    const currentUser = await User.findById(currentUserId);
+    const targetUser = await User.findById(targetUserId);
+
+    if (!targetUser) {
         res.status(404);
         throw new Error('User not found');
     }
 
-    // Add to likes if not already there
-    if (!currentUser.likes.includes(likedUserId)) {
-        currentUser.likes.push(likedUserId);
-        await currentUser.save();
+    // Check if already swiped
+    const alreadySwiped = currentUser.swipeHistory.find(
+        (h) => h.userId.toString() === targetUserId
+    );
+
+    if (alreadySwiped) {
+        res.status(400);
+        throw new Error('You have already swiped on this profile');
     }
 
-    // Check if mutual like
-    if (likedUser.likes.includes(currentUserId)) {
-        // Create Match
-        const match = await Match.create({
-            users: [currentUserId, likedUserId]
-        });
-
-        currentUser.matches.push(likedUserId);
-        likedUser.matches.push(currentUserId);
-
-        await currentUser.save();
-        await likedUser.save();
-
-        return res.status(201).json({ isMatch: true, match });
-    }
-
-    res.json({ isMatch: false });
-};
-
-const getMatches = async (req, res) => {
-    const matches = await Match.find({
-        users: { $in: [req.user._id] }
-    }).populate('users', 'name photos bio');
-
-    // Filter out current user from the populated users in each match
-    const filteredMatches = matches.map(match => {
-        const otherUser = match.users.find(u => u._id.toString() !== req.user._id.toString());
-        return {
-            _id: match._id,
-            otherUser,
-            createdAt: match.createdAt
-        };
+    // Record the swipe
+    currentUser.swipeHistory.push({
+        userId: targetUserId,
+        action: action
     });
 
-    res.json(filteredMatches);
+    let isMatch = false;
+    let matchData = null;
+
+    if (action === 'like' || action === 'superlike') {
+        // Add to likes list for potentially faster querying later
+        currentUser.likes.push(targetUserId);
+
+        // Check for Mutual Like
+        // We check if the target user has ALREADY liked the current user
+        // We can check their 'likes' array or their swipeHistory
+        const isMutual = targetUser.likes.includes(currentUserId);
+
+        if (isMutual) {
+            isMatch = true;
+
+            // Create the Match Document
+            matchData = await Match.create({
+                users: [currentUserId, targetUserId]
+            });
+
+            // Update both users' match lists
+            currentUser.matches.push(targetUserId);
+            targetUser.matches.push(currentUserId);
+
+            await targetUser.save();
+        }
+    }
+
+    await currentUser.save();
+
+    res.status(200).json({
+        success: true,
+        isMatch,
+        match: matchData
+    });
 };
 
-module.exports = { likeUser, getMatches };
+// @desc    Get all matches
+// @route   GET /api/matches
+// @access  Private
+const getMatches = async (req, res) => {
+    // Find all matches where the current user is a participant
+    const matches = await Match.find({
+        users: { $in: [req.user._id] }
+    })
+        .populate({
+            path: 'users',
+            select: 'name photos bio age gender', // Select specific fields
+        })
+        .populate({
+            path: 'lastMessage',
+            select: 'content sender createdAt read'
+        })
+        .sort({ updatedAt: -1 }); // Most recent matches/chats first
+
+    // Format the response to make it easy for frontend
+    const formattedMatches = matches.map(match => {
+        // Find the "other" user
+        const otherUser = match.users.find(u => u._id.toString() !== req.user._id.toString());
+
+        // Safety check if other user is deleted
+        if (!otherUser) return null;
+
+        return {
+            _id: match._id,
+            userId: otherUser._id,
+            name: otherUser.name,
+            photo: otherUser.photos && otherUser.photos.length > 0 ? otherUser.photos[0] : null,
+            age: otherUser.age,
+            lastMessage: match.lastMessage,
+            createdAt: match.createdAt
+        };
+    }).filter(m => m !== null); // Filter out nulls
+
+    res.json(formattedMatches);
+};
+
+module.exports = { swipeUser, getMatches };

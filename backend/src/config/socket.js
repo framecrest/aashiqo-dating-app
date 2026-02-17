@@ -12,14 +12,23 @@ module.exports = (io) => {
         socket.on('send_message', async (data) => {
             const { matchId, sender, receiver, text } = data;
 
-            const newMessage = await Message.create({
-                matchId,
-                sender,
-                receiver,
-                text
-            });
+            try {
+                const newMessage = await Message.create({
+                    matchId,
+                    sender,
+                    receiver,
+                    text
+                });
 
-            io.to(matchId).emit('receive_message', newMessage);
+                // Update the Match with the last message reference
+                await require('../models/Match').findByIdAndUpdate(matchId, {
+                    lastMessage: newMessage._id
+                });
+
+                io.to(matchId).emit('receive_message', newMessage);
+            } catch (error) {
+                console.error('Socket Message Error:', error);
+            }
         });
 
         socket.on('typing', (data) => {

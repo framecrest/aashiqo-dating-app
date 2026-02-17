@@ -1,5 +1,5 @@
-export const API_BASE_URL = 'http://192.168.1.14:5001/api';
-export const SOCKET_URL = 'http://192.168.1.14:5001';
+export const API_BASE_URL = 'https://aashiqo-dating-app.onrender.com/api';
+export const SOCKET_URL = 'https://aashiqo-dating-app.onrender.com';
 
 export const STORAGE_KEYS = {
     AUTH_TOKEN: 'auth_token',

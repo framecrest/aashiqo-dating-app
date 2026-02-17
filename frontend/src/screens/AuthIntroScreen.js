@@ -1,58 +1,55 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Animated } from 'react-native';
 import { COLORS, SPACING } from '../utils/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withRepeat,
-    withTiming,
-    withSequence,
-} from 'react-native-reanimated';
 import { Apple } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const AnimatedBlob = ({ color, size, initialPos, duration }) => {
-    const translateX = useSharedValue(0);
-    const translateY = useSharedValue(0);
-    const scale = useSharedValue(1);
+    const moveAnim = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+    const scaleAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
-        translateX.value = withRepeat(
-            withSequence(
-                withTiming(100, { duration }),
-                withTiming(-100, { duration })
-            ),
-            -1,
-            true
+        const move = Animated.loop(
+            Animated.sequence([
+                Animated.timing(moveAnim, {
+                    toValue: { x: 100, y: -50 },
+                    duration: duration,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(moveAnim, {
+                    toValue: { x: -100, y: 50 },
+                    duration: duration,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(moveAnim, {
+                    toValue: { x: 0, y: 0 },
+                    duration: duration,
+                    useNativeDriver: true,
+                }),
+            ])
         );
-        translateY.value = withRepeat(
-            withSequence(
-                withTiming(-80, { duration: duration * 1.2 }),
-                withTiming(80, { duration: duration * 1.2 })
-            ),
-            -1,
-            true
-        );
-        scale.value = withRepeat(
-            withSequence(
-                withTiming(1.4, { duration: duration * 0.8 }),
-                withTiming(0.7, { duration: duration * 0.8 })
-            ),
-            -1,
-            true
-        );
-    }, []);
 
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: translateX.value },
-            { translateY: translateY.value },
-            { scale: scale.value }
-        ],
-    }));
+        const scale = Animated.loop(
+            Animated.sequence([
+                Animated.timing(scaleAnim, {
+                    toValue: 1.4,
+                    duration: duration * 0.8,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(scaleAnim, {
+                    toValue: 0.7,
+                    duration: duration * 0.8,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        move.start();
+        scale.start();
+    }, []);
 
     return (
         <Animated.View style={[
@@ -64,8 +61,12 @@ const AnimatedBlob = ({ color, size, initialPos, duration }) => {
                 borderRadius: size / 2,
                 left: initialPos.x,
                 top: initialPos.y,
-            },
-            animatedStyle
+                transform: [
+                    { translateX: moveAnim.x },
+                    { translateY: moveAnim.y },
+                    { scale: scaleAnim }
+                ],
+            }
         ]} />
     );
 };

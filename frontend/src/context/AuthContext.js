@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { STORAGE_KEYS } from '../utils/constants';
 
 export const AuthContext = createContext();
@@ -14,7 +15,7 @@ export const AuthProvider = ({ children }) => {
         const loadStorageData = async () => {
             try {
                 const [storedToken, storedUser] = await Promise.all([
-                    AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
+                    SecureStore.getItemAsync(STORAGE_KEYS.AUTH_TOKEN),
                     AsyncStorage.getItem(STORAGE_KEYS.USER_DATA)
                 ]);
 
@@ -45,13 +46,13 @@ export const AuthProvider = ({ children }) => {
     const loginAuth = async (userData, userToken) => {
         setToken(userToken);
         await updateStoredUser(userData);
-        await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, userToken);
+        await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, userToken);
     };
 
     const logoutAuth = async () => {
         setToken(null);
         await updateStoredUser(null);
-        await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        await SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
     };
 
     return (

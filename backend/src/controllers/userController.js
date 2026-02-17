@@ -73,15 +73,53 @@ const registerComplete = async (req, res) => {
 };
 
 const getDiscoverProfiles = async (req, res) => {
-    // Get users that are not the current user and not already liked/matched
     const currentUserId = req.user._id;
     const user = await User.findById(currentUserId);
 
+    // Get list of users already swiped on (liked, passed, or superliked)
+    const swipedUserIds = user.swipeHistory.map(h => h.userId);
+
     const profiles = await User.find({
-        _id: { $ne: currentUserId, $nin: [...user.likes, ...user.matches] },
-    }).limit(50);
+        _id: {
+            $ne: currentUserId,
+            $nin: [...swipedUserIds, ...user.matches]
+        },
+        onboarded: true // Only show fully onboarded users
+    })
+        .select('-password -__v -swipeHistory -deviceSessions') // Exclude sensitive/heavy fields
+        .limit(20);
 
     res.json(profiles);
 };
 
-module.exports = { getUserProfile, updateProfile, getDiscoverProfiles, registerComplete };
+const uploadPhoto = async (req, res) => {
+    if (!req.file) {
+        res.status(400);
+        throw new Error('No image file provided');
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (user.photos.length >= 6) {
+        res.status(400);
+        throw new Error('Max 6 photos allowed');
+    }
+
+    // Cloudinary URL is available in req.file.path
+    user.photos.push(req.file.path);
+    await user.save();
+
+    res.json({
+        message: 'Photo uploaded successfully',
+        photoUrl: req.file.path,
+        photos: user.photos
+    });
+};
+
+module.exports = {
+    getUserProfile,
+    updateProfile,
+    getDiscoverProfiles,
+    registerComplete,
+    uploadPhoto
+};

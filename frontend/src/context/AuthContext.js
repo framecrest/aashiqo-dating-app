@@ -9,16 +9,19 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Initial load from storage
     useEffect(() => {
         const loadStorageData = async () => {
             try {
-                const storedToken = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-                const storedUser = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+                const [storedToken, storedUser] = await Promise.all([
+                    AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
+                    AsyncStorage.getItem(STORAGE_KEYS.USER_DATA)
+                ]);
 
-                if (storedToken && storedUser) {
-                    setToken(storedToken);
-                    setUser(JSON.parse(storedUser));
-                }
+                if (storedToken) setToken(storedToken);
+                if (storedUser) setUser(JSON.parse(storedUser));
+
+                console.log('App Loaded: Token present?', !!storedToken);
             } catch (e) {
                 console.error('Failed to load storage data', e);
             } finally {
@@ -29,22 +32,37 @@ export const AuthProvider = ({ children }) => {
         loadStorageData();
     }, []);
 
+    // Helper to update user state AND storage
+    const updateStoredUser = async (newUserData) => {
+        setUser(newUserData);
+        if (newUserData) {
+            await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(newUserData));
+        } else {
+            await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
+        }
+    };
+
     const loginAuth = async (userData, userToken) => {
-        setUser(userData);
         setToken(userToken);
+        await updateStoredUser(userData);
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, userToken);
-        await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
     };
 
     const logoutAuth = async () => {
-        setUser(null);
         setToken(null);
+        await updateStoredUser(null);
         await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-        await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
     };
 
     return (
-        <AuthContext.Provider value={{ user, setUser, token, loading, loginAuth, logoutAuth }}>
+        <AuthContext.Provider value={{
+            user,
+            setUser: updateStoredUser, // Wrap setUser to always persist
+            token,
+            loading,
+            loginAuth,
+            logoutAuth
+        }}>
             {children}
         </AuthContext.Provider>
     );
